@@ -1,0 +1,19 @@
+# ESP32-S3 bus MP3 player defaults.
+# USB Host (native USB-OTG, GPIO19=D- / GPIO20=D+) is used for the flash drive.
+CONFIG_IDF_TARGET="esp32s3"
+
+# USB-Serial/JTAG and USB-OTG share the SAME pins (GPIO19/20) and are mutually
+# exclusive. USB-Serial/JTAG owns the pins by default, which blocks the flash
+# drive from ever being seen. The default secondary USB console (choice member
+# ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG) selects USJ_ENABLE, so pick the "None"
+# choice member AND disable USJ to free the OTG for USB Host.
+# (Safe: primary console + flashing stay on the separate UART0 port.)
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
+CONFIG_USJ_ENABLE_USB_SERIAL_JTAG=n
+
+# I2S uses an I2S peripheral; keep default PSRAM OFF (S3-DevKitC-1 usually has it,
+# but the audio path streams in chunks and does not need PSRAM).
+CONFIG_SPIRAM=n
+
+# Small playback buffers are fine since we stream per-chunk.
+CONFIG_FREERTOS_HZ=1000

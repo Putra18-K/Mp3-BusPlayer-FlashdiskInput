@@ -1,0 +1,64 @@
+# ESP-IDF build output
+/build/
+managed_components/
+dependencies.lock
+
+# Generated local ESP-IDF config (keep sdkconfig.defaults, ignore generated)
+/sdkconfig
+/sdkconfig.old
+/sdkconfig.esp32s3
+/sdkconfig.defaults.esp32s3
+
+# Graphify knowledge graph output
+/graphify-out/
+
+# Tool / IDE dirs
+/.idea/
+/.vscode/
+/.clion/
+/.claude/
+/.commandcode/
+*.swp
+*.swo
+
+env_check.txt
+
+# Python / language caches
+__pycache__/
+*.pyc
+*.pyo
+node_modules/
+
+# Compiled / intermediate artifacts
+*.o
+*.obj
+*.a
+*.elf
+*.bin
+*.hex
+*.map
+*.d
+*.lst
+
+# Logs & cache
+*.log
+*.tmp
+*.cache
+logs/
+
+# Local & environment config
+.env
+.env.*
+local.properties
+*.local
+
+# Credentials & secrets
+*.pem
+*.p12
+*.jks
+*.key
+credentials.json
+secrets*.json
+
+# minimp3 decoder header is downloaded, not committed (see README.md)
+components/minimp3/include/minimp3.h

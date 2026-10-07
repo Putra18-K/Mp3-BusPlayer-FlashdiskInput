@@ -1,0 +1,10 @@
+## Managed components (downloaded automatically by the IDF component manager).
+dependencies:
+  # USB Host Mass Storage class driver: provides `msc_host_*` for reading a
+  # USB flash drive (native USB-OTG host) and mounting it as a FatFS volume.
+  # The old `espressif/esp-iot-solution` (esp_msc_host) is gone from the
+  # registry, so this is the current replacement for ESP-IDF 5.x / 6.x.
+  usb_host_msc: "^1.1.4"
+
+  # Use the compiler bundled with your IDF instead of an IDF binary component.
+  idf: ">=5.0"
