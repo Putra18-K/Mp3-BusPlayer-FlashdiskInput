@@ -26,8 +26,7 @@ esp_err_t oled_init(void);
 /* Clear the internal framebuffer (does NOT push to screen). */
 void oled_clear(void);
 
-/* Push the framebuffer to the panel (call after drawing). */
-void oled_update(void);
+esp_err_t oled_update(void);
 
 /* Draw a string at (x,y). y is a pixel row; use 0,8,16,24 for a 32px panel. */
 void oled_draw_text(uint8_t x, uint8_t y, const char *s);

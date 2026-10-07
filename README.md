@@ -3,12 +3,11 @@
 Pemutar MP3 mandiri untuk bus sekolah. Musik dicolok via **flashdisk USB (FAT32)** yang
 dibaca USB-host native ESP32-S3. Library lagu ditampilkan di **OLED 0.91" (SSD1306, I2C)**,
 audio diputar lewat **PCM5102A (I2S DAC)** → jack 3.5mm → preamp.
-Kontrol: **1 tombol** (PLAY) — setiap tekan memutar lagu **berikutnya** secara berurutan.
+Kontrol: tombol **PLAY** untuk memutar lagu berikutnya dan tombol **RESET** untuk kembali ke lagu pertama.
 
 Framework: **ESP-IDF 5.x / 6.x** (bukan Arduino) — baca flashdisk USB-host pakai jalur
 resmi Espressif (`usb_host_msc`), dan open-source MP3 decoder **minimp3** dipakai untuk
-memutar file tanpa ketergantungan framework audio yang rapuh. Flashdisk mendukung
-**FAT32** dan **exFAT** (NTFS tidak didukung FatFS/ESP-IDF).
+memutar file tanpa ketergantungan framework audio yang rapuh. Flashdisk mendukung **FAT32**. exFAT hanya dapat digunakan jika FatFS pada ESP-IDF dibangun dengan dukungan exFAT; NTFS tidak didukung.
 
 ---
 
@@ -30,7 +29,7 @@ memutar file tanpa ketergantungan framework audio yang rapuh. Flashdisk mendukun
 **Semua pin bisa diubah**: macro ada di `main/oled.h`, `main/audio.h`, `main/app_main.c`.
 
 ### Catatan USB host
-- Flashdisk **HARUS FAT32 atau exFAT** (bukan NTFS).
+- Flashdisk **HARUS FAT32**. exFAT hanya bekerja jika dukungan exFAT FatFS benar-benar diaktifkan.
 - **5V** ke flashdisk harus dari sumber 5V (rail/buck), **bukan** 3.3V.
 - Jangan pakai port USB native untuk flashing bersamaan — GPIO19/20 dipakai untuk flashdisk.
   Flashing lewat port **USB-UART terpisah**, atau cabut flashdisk saat flash.
@@ -40,7 +39,7 @@ memutar file tanpa ketergantungan framework audio yang rapuh. Flashdisk mendukun
   jika ESP-IDF di-update/reinstall, patch tersebut perlu diulang.
 
 ### Catatan MCLK / PCM5102A
-- Kalau GPIO6 → SCK PCM5102A tersambung: biarkan seperti di atas (S3 generate MCLK).
+- SCK PCM5102A tersambung ke GPIO18 sesuai wiring dan konfigurasi firmware.
 - Kalau **tidak** menyambung MCLK: set `PIN_I2S_MCLK` ke `I2S_GPIO_UNUSED` di `main/audio.h`
   **dan** bind SCK PCM5102A ke GND (mode auto). Bunyi/klik jika salah satu tidak konsisten.
 
@@ -87,23 +86,24 @@ Lalu Build/Upload via bilah PlatformIO. (PlatformIO juga menghormati
 
 ---
 
-## Alur kerja (1 tombol)
-- **Boot** → OLED menampilkan judul "MP3 BUS PLAYER" karakter demi karakter,
+## Alur kerja
+- **Boot** → OLED menampilkan judul "SMARTNAVI VOICE ANNOUNCER" karakter demi karakter,
   lalu menahan judul lengkap selama ±3 detik.
 - **Setelah judul** → OLED menampilkan "mencari usb".
 - **Tanpa flashdisk** → tetap di layar "mencari usb".
 - **Flashdisk dicolok** → OLED menampilkan "mencari file" dengan **loading bar
   beranimasi** selama playlist dipindai untuk file musik (`.mp3` dan `.wav`).
 - **Setelah scan selesai** → OLED menampilkan "KLIK TOMBOL / UNTUK LANJUT".
-- **Tekan tombol** → masuk mode player: **library 3 baris** — lagu sebelumnya,
-  lagu aktif (tengah, disorot), lagu berikutnya. Tekan pertama memutar lagu 1.
+- **Tekan PLAY** → masuk mode player: **library 3 baris** — lagu sebelumnya,
+  lagu aktif, dan lagu berikutnya. Tekan pertama memutar lagu pertama.
+- **Tekan RESET** → kembali ke lagu pertama.
 - **Tekan lagi** → memutar lagu berikutnya, **membungkus** dari lagu terakhir
   kembali ke lagu 1.
 - **Tekan saat lagu sedang berjalan** → **langsung skip** ke lagu berikutnya.
 - Baris aktif menampilkan **progress bar** yang mengisi sesuai durasi lagu.
 - Saat lagu habis → **berhenti** dan menunggu (tidak auto-play; tombol yang memajukan).
 - **Flashdisk dicabut** → OLED kembali ke "mencari usb", audio berhenti.
-- Flashdisk NTFS/exFAT yang tidak didukung → OLED menampilkan "flashdisk harus FAT32".
+- Filesystem yang tidak didukung → OLED menampilkan "flashdisk harus FAT32".
 
 ---
 
@@ -126,8 +126,8 @@ Lalu Build/Upload via bilah PlatformIO. (PlatformIO juga menghormati
 1. **Compile**: pastikan 0 error (CMake harus menemukan `minimp3.h`).
 2. **Tanpa flashdisk**: OLED tampil "menunggu usb", tombol tidak menggantung.
 3. **Flashdisk FAT32 berisi 2–3 file `.mp3`/`.wav`**: saat dicolok tampil "mencari",
-   lalu library tampil (2 baris, pertama disorot); satu tekan tombol → lagu 1, tekan lagi
-   → lagu 2, dan seterusnya.
+   lalu library tampil dalam 3 baris; tekan PLAY → lagu 1, tekan lagi → lagu 2, dan seterusnya.
+   Tekan RESET untuk kembali ke lagu 1.
 4. **Wrap**: setelah lagu terakhir, tekan lagi → kembali ke lagu 1.
 5. **Skip**: tekan saat sedang putar → langsung pindah lagu berikutnya.
 6. **Sambung–putus flashdisk**: deteksi mount/remove; audio berhenti saat dicabut.
@@ -136,8 +136,10 @@ Lalu Build/Upload via bilah PlatformIO. (PlatformIO juga menghormati
 ## Batasan yang diketahui
 - File musik yang didukung: **MP3** (lewat minimp3) dan **WAV** (PCM 8/16-bit, mono/stereo,
   lewat parser RIFF sendiri). Format lain (flac/ogg/aac) tidak dideteksi.
+- Playlist dibatasi maksimal **450 lagu** dan hanya membaca folder root flashdisk.
+- Urutan memakai natural sort case-insensitive: `1.mp3`, `2.mp3`, `10.mp3`.
+  Gunakan nama ASCII bernomor seperti `001-lagu.mp3`, `002-lagu.mp3`.
 - Nama file dengan karakter non-ASCII tampil sebagai spasi di OLED (font 5x7 ASCII).
-  Sebaiknya beri nama file ASCII (`01-lagu.mp3`).
 - Scan hanya folder **root** flashdisk (tidak rekursif ke subfolder).
 
 ---

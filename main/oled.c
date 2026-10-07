@@ -93,7 +93,6 @@ static esp_err_t ssd1306_data(const uint8_t *data, size_t len)
 }
 
 static void oled_clear_fb(void);
-void oled_update(void);                    /* used by oled_init before its defn */
 static void oled_clear_fb(void)
 {
     memset(s_fb, 0, sizeof(s_fb));
@@ -313,17 +312,21 @@ void oled_draw_roundrect(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint8_t r)
     }
 }
 
-void oled_update(void)
+esp_err_t oled_update(void)
 {
-    if (!s_inited) return;           /* panel mati / init gagal -> skip I2C */
-    /* Horizontal addressing, exactly like Adafruit_SSD1306::display():
-     * set the column range, set the page range, then push the whole buffer
-     * in one shot. This is what prevents the scrambled/rotated output. */
-    ssd1306_cmd(0x21);                     /* column address range */
-    ssd1306_cmd(0x00);
-    ssd1306_cmd(OLED_WIDTH - 1);
-    ssd1306_cmd(0x22);                     /* page address range */
-    ssd1306_cmd(0x00);
-    ssd1306_cmd(FB_PAGES - 1);
-    ssd1306_data(s_fb, FB_SIZE);
+    if (!s_inited) return ESP_ERR_INVALID_STATE;
+
+    esp_err_t err = ssd1306_cmd(0x21);
+    if (err != ESP_OK) return err;
+    err = ssd1306_cmd(0x00);
+    if (err != ESP_OK) return err;
+    err = ssd1306_cmd(OLED_WIDTH - 1);
+    if (err != ESP_OK) return err;
+    err = ssd1306_cmd(0x22);
+    if (err != ESP_OK) return err;
+    err = ssd1306_cmd(0x00);
+    if (err != ESP_OK) return err;
+    err = ssd1306_cmd(FB_PAGES - 1);
+    if (err != ESP_OK) return err;
+    return ssd1306_data(s_fb, FB_SIZE);
 }

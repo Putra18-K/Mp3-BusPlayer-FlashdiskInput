@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stdint.h>
 #include "esp_err.h"
 
 /* ================================================================== */
@@ -57,6 +58,9 @@ void audio_play(const char *path);
 
 /* Stop current playback. Non-blocking. */
 void audio_stop(void);
+
+/* Stop playback and wait until the audio task has closed its current file. */
+esp_err_t audio_stop_and_wait(uint32_t timeout_ms);
 
 /* Emit a 1 kHz diagnostic sine for ~3 s (used when AUDIO_TEST_TONE is on). */
 void audio_play_test_tone(void);

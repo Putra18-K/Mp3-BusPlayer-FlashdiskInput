@@ -24,6 +24,7 @@
 #include "usb/usb_host.h"
 #include "usb/msc_host_vfs.h"
 #include "ffconf.h"
+#include "audio.h"
 #include "usb.h"
 
 static const char *TAG = "usb";
@@ -70,7 +71,9 @@ static void msc_event_cb(const msc_host_event_t *event, void *arg)
     } else {
         return;                         /* suspend/resume, ignore */
     }
-    xQueueSend(s_queue, &msg, 0);
+    if (xQueueSend(s_queue, &msg, 0) != pdTRUE) {
+        ESP_LOGW(TAG, "MSC event queue full; event dropped");
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -78,9 +81,16 @@ static void msc_event_cb(const msc_host_event_t *event, void *arg)
 /* ------------------------------------------------------------------ */
 static void usb_mount_task(void *arg)
 {
+    msc_msg_t pending = {0};
+    bool has_pending = false;
+
     for (;;) {
         msc_msg_t msg;
-        if (!xQueueReceive(s_queue, &msg, portMAX_DELAY)) continue;
+        if (has_pending) {
+            msg = pending;
+        } else if (!xQueueReceive(s_queue, &msg, portMAX_DELAY)) {
+            continue;
+        }
 
         if (msg.id == EV_CONNECTED) {
             ESP_LOGI(TAG, "installing device addr=%u...", msg.data.addr);
@@ -118,13 +128,25 @@ static void usb_mount_task(void *arg)
             if (msg.data.dev != s_device && msg.data.dev != s_stale_device) continue;
             if (msg.data.dev == s_stale_device) s_stale_device = NULL;
             if (s_vfs) {
-                msc_host_vfs_unregister(s_vfs);
+                esp_err_t stop_err = audio_stop_and_wait(2000);
+                if (stop_err != ESP_OK) {
+                    ESP_LOGE(TAG, "audio stop before USB unmount failed: %s", esp_err_to_name(stop_err));
+                    pending = msg;
+                    has_pending = true;
+                    vTaskDelay(pdMS_TO_TICKS(50));
+                    continue;
+                }
+                esp_err_t unmount_err = msc_host_vfs_unregister(s_vfs);
+                if (unmount_err != ESP_OK) {
+                    ESP_LOGW(TAG, "USB VFS unregister failed: %s", esp_err_to_name(unmount_err));
+                }
                 s_vfs = NULL;
             }
             if (s_device) {
                 msc_host_uninstall_device(s_device);
                 s_device = NULL;
             }
+            has_pending = false;
             s_state = USB_NONE;
             ESP_LOGI(TAG, "flash drive removed");
         }
@@ -172,8 +194,10 @@ esp_err_t usb_init(void)
         return err;
     }
 
-    xTaskCreate(usb_host_events_task, "usb-host", 4096, NULL, 4, NULL);
-    xTaskCreate(usb_mount_task, "usb-mount", 8192, NULL, 4, NULL);
+    BaseType_t task_err = xTaskCreate(usb_host_events_task, "usb-host", 4096, NULL, 4, NULL);
+    if (task_err != pdPASS) return ESP_ERR_NO_MEM;
+    task_err = xTaskCreate(usb_mount_task, "usb-mount", 8192, NULL, 4, NULL);
+    if (task_err != pdPASS) return ESP_ERR_NO_MEM;
     ESP_LOGI(TAG, "usb host ready");
     return ESP_OK;
 }
@@ -232,6 +256,7 @@ static bool is_music_file(const char *n)
 
 esp_err_t usb_scan_playlist(char (*names)[128], int max, int *count)
 {
+    if (!names || !count || max <= 0) return ESP_ERR_INVALID_ARG;
     *count = 0;
     DIR *d = opendir(USB_BASE_PATH);
     if (!d) {

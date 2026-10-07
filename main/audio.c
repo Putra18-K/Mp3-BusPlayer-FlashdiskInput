@@ -36,6 +36,7 @@ static const char *TAG = "audio";
 
 static TaskHandle_t s_task = NULL;
 static SemaphoreHandle_t s_mtx = NULL;
+static SemaphoreHandle_t s_idle = NULL;
 static char s_play_path[160];
 static volatile bool s_playing = false;
 static volatile bool s_cancel = false;
@@ -187,7 +188,6 @@ static void play_mp3(const char *path)
 
     bool first = true;
 
-    s_cancel = false;
     s_playing = true;
     s_write_seq = 0;
 
@@ -376,7 +376,6 @@ static void play_wav(const char *path)
         return;
     }
 
-    s_cancel = false;
     s_playing = true;
     s_write_seq = 0;
 
@@ -429,7 +428,6 @@ static void test_tone_run(void)
     float phase = 0.0f;
     const float step = TONE_TWO_PI * (float)TONE_HZ / (float)TONE_SAMPLE_RATE;
 
-    s_cancel = false;
     s_playing = true;
     s_write_seq = 0;
 
@@ -468,6 +466,7 @@ static void audio_task(void *arg)
         xTaskNotifyWait(0, ULONG_MAX, &cmd, portMAX_DELAY);
 
         if (cmd == AUDIO_CMD_PLAY_FILE) {
+            s_cancel = false;
             xSemaphoreTake(s_mtx, portMAX_DELAY);
             char path[160];
             strncpy(path, s_play_path, sizeof(path) - 1);
@@ -479,9 +478,8 @@ static void audio_task(void *arg)
         }
         /* AUDIO_CMD_NONE (stop): playback already aborted via s_cancel. */
 
-        /* Always leave the DAC at zero when playback ends (normal end, cancel,
-         * failed open, decode error) so it never holds the last sample. */
         output_silence(SILENCE_MS);
+        xSemaphoreGive(s_idle);
     }
 }
 
@@ -536,6 +534,8 @@ esp_err_t audio_init(void)
 
     s_mtx = xSemaphoreCreateMutex();
     ESP_RETURN_ON_FALSE(s_mtx, ESP_ERR_NO_MEM, TAG, "mutex");
+    s_idle = xSemaphoreCreateBinary();
+    ESP_RETURN_ON_FALSE(s_idle, ESP_ERR_NO_MEM, TAG, "idle semaphore");
 
     ESP_LOGI(TAG, "I2S config: rate=44100 Hz, bits=16, mode=%s, MCLK=GPIO%d, BCLK=GPIO%d, WS=GPIO%d, DOUT=GPIO%d, DIN=unused",
 #if PCM5102_LEFT_JUSTIFIED
@@ -552,7 +552,11 @@ esp_err_t audio_init(void)
 
 void audio_create_task(void)
 {
-    xTaskCreate(audio_task, "audio", 32768, NULL, 5, &s_task);
+    BaseType_t err = xTaskCreate(audio_task, "audio", 32768, NULL, 5, &s_task);
+    if (err != pdPASS) {
+        s_task = NULL;
+        ESP_LOGE(TAG, "audio task creation failed");
+    }
 }
 
 void audio_play(const char *path)
@@ -578,6 +582,20 @@ void audio_stop(void)
     if (!s_task) return;
     s_cancel = true;
     xTaskNotify(s_task, AUDIO_CMD_NONE, eSetValueWithOverwrite);
+}
+
+esp_err_t audio_stop_and_wait(uint32_t timeout_ms)
+{
+    if (!s_task || !s_idle) return ESP_ERR_INVALID_STATE;
+
+    while (xSemaphoreTake(s_idle, 0) == pdTRUE) {
+    }
+    audio_stop();
+    if (xSemaphoreTake(s_idle, pdMS_TO_TICKS(timeout_ms)) != pdTRUE) {
+        ESP_LOGE(TAG, "audio stop timed out after %lu ms", (unsigned long)timeout_ms);
+        return ESP_ERR_TIMEOUT;
+    }
+    return ESP_OK;
 }
 
 bool audio_is_playing(void)
