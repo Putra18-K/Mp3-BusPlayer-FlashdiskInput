@@ -18,6 +18,7 @@ dependencies.lock
 /.clion/
 /.claude/
 /.commandcode/
+.graphifyignore
 *.swp
 *.swo
 
